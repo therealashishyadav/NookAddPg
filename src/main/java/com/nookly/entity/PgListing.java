@@ -26,6 +26,7 @@ public class PgListing {
 	private String pinCode;
 	private String googleMapLink;
 	private String nearbyLandmarks;
+	private String monthlyRent;
 
 	// ── Media ─────────────────────────────────────────────────────────────
 	private String coverImageUrl;
@@ -162,6 +163,22 @@ public class PgListing {
 
 	public Long getId() {
 		return id;
+	}
+
+	public String getMonthlyRent() {
+		return monthlyRent;
+	}
+
+	public void setMonthlyRent(String monthlyRent) {
+		this.monthlyRent = monthlyRent;
+	}
+
+	public void setCreatedAt(LocalDateTime createdAt) {
+		this.createdAt = createdAt;
+	}
+
+	public void setUpdatedAt(LocalDateTime updatedAt) {
+		this.updatedAt = updatedAt;
 	}
 
 	public void setId(Long id) {

@@ -176,6 +176,8 @@
 
 package com.nookly.controller;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import com.nookly.dto.CreatePgListingRequest;
 import com.nookly.dto.PgListingResponse;
 import com.nookly.entity.OccupancyType;
@@ -215,13 +217,11 @@ public class PgListingController {
     @Autowired
     private PgListingService pgListingService;
 
-    // Same secret key as Account API
     private Key getSigninKey() {
         byte[] key = Decoders.BASE64.decode("q4JjknVjndVi5B1u6WqBl+S3rXWk4Hrp12qFZRfTcys=");
         return Keys.hmacShaKeyFor(key);
     }
 
-    // Extract ownerId directly from JWT token — no X-Owner-Id header needed
     private Long getOwnerIdFromToken(jakarta.servlet.http.HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -233,20 +233,41 @@ public class PgListingController {
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
-        return claims.get("userId", Long.class);
+        Object userIdObj = claims.get("userId");
+        if (userIdObj instanceof Integer) {
+			return ((Integer) userIdObj).longValue();
+		}
+        return (Long) userIdObj;
     }
 
+//    @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+//    public ResponseEntity<Map<String, String>> uploadImage(
+//            @RequestParam("file") MultipartFile file) throws IOException {
+//        String uploadDir = "uploads/";
+//        File dir = new File(uploadDir);
+//        if (!dir.exists()) dir.mkdirs();
+//        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+//        Path filePath = Paths.get(uploadDir + fileName);
+//        Files.write(filePath, file.getBytes());
+//        String fileUrl = "http://localhost:8084/uploads/" + fileName;
+//        return ResponseEntity.ok(Map.of("url", fileUrl));
+//    }
+    
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, String>> uploadImage(
             @RequestParam("file") MultipartFile file) throws IOException {
-        String uploadDir = "uploads/";
-        File dir = new File(uploadDir);
-        if (!dir.exists()) dir.mkdirs();
-        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-        Path filePath = Paths.get(uploadDir + fileName);
-        Files.write(filePath, file.getBytes());
-        String fileUrl = "http://localhost:8084/uploads/" + fileName;
-        return ResponseEntity.ok(Map.of("url", fileUrl));
+
+        Cloudinary cloudinary = new Cloudinary(ObjectUtils.asMap(
+            "cloud_name", System.getenv("CLOUDINARY_CLOUD_NAME"),
+            "api_key",    System.getenv("CLOUDINARY_API_KEY"),
+            "api_secret", System.getenv("CLOUDINARY_API_SECRET")
+        ));
+
+        Map uploadResult = cloudinary.uploader().upload(file.getBytes(),
+            ObjectUtils.asMap("folder", "nookly-pg"));
+
+        String url = (String) uploadResult.get("secure_url");
+        return ResponseEntity.ok(Map.of("url", url));
     }
 
     // ownerId extracted from token — frontend sends no owner ID
