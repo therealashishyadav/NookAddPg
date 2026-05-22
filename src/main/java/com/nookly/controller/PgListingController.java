@@ -240,18 +240,6 @@ public class PgListingController {
         return (Long) userIdObj;
     }
 
-//    @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-//    public ResponseEntity<Map<String, String>> uploadImage(
-//            @RequestParam("file") MultipartFile file) throws IOException {
-//        String uploadDir = "uploads/";
-//        File dir = new File(uploadDir);
-//        if (!dir.exists()) dir.mkdirs();
-//        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
-//        Path filePath = Paths.get(uploadDir + fileName);
-//        Files.write(filePath, file.getBytes());
-//        String fileUrl = "http://localhost:8084/uploads/" + fileName;
-//        return ResponseEntity.ok(Map.of("url", fileUrl));
-//    }
     
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, String>> uploadImage(
