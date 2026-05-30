@@ -31,7 +31,7 @@ public class PgListing {
 	// ── Media ─────────────────────────────────────────────────────────────
 	private String coverImageUrl;
 
-	@ElementCollection
+	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "pg_gallery_images", joinColumns = @JoinColumn(name = "pg_listing_id"))
 	@Column(name = "image_url")
 	private List<String> galleryImages = new ArrayList<>();
@@ -155,8 +155,7 @@ public class PgListing {
 	@UpdateTimestamp
 	private LocalDateTime updatedAt;
 
-	// ── Sharing Options (one-to-many) ─────────────────────────────────────
-	@OneToMany(mappedBy = "pgListing", cascade = CascadeType.ALL, orphanRemoval = true)
+	@OneToMany(mappedBy = "pgListing", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
 	private List<PgSharingOption> sharingOptions = new ArrayList<>();
 
 	// ── Getters & Setters ─────────────────────────────────────────────────
