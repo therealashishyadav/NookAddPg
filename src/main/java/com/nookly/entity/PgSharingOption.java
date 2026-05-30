@@ -32,10 +32,13 @@ public class PgSharingOption {
 	private Integer totalBeds; // total beds in this category
 	private Integer availableBeds; // decrements on booking
 
-	@ElementCollection
-	@CollectionTable(name = "sharing_option_amenities", joinColumns = @JoinColumn(name = "sharing_option_id"))
+	@ElementCollection(fetch = FetchType.EAGER)
+	@CollectionTable(
+	    name = "sharing_option_amenities",
+	    joinColumns = @JoinColumn(name = "sharing_option_id")
+	)
 	@Column(name = "amenity")
-	private List<String> amenities = new ArrayList<>(); // ["AC", "WiFi", "Attached Bathroom"]
+	private List<String> amenities = new ArrayList<>();
 
 	private Boolean isAvailable = true;
 
