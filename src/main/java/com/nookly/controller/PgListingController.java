@@ -199,16 +199,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.Key;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/pg-listings")
@@ -349,5 +344,12 @@ public class PgListingController {
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return ResponseEntity.ok(pgListingService.getAllListings(pageable));
+    }
+
+    // Endpoint for internal service communication (Management Service)
+    // Returns all PG listings as a List (not paginated)
+    @GetMapping("/all")
+    public ResponseEntity<List<PgListingResponse>> getAllListingsAsList() {
+        return ResponseEntity.ok(pgListingService.getAllListingsAsList());
     }
 }

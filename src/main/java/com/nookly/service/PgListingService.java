@@ -42,5 +42,8 @@ public interface PgListingService {
     void deactivateListing(Long id, Long ownerId);
 
     void deleteListing(Long id, Long ownerId);
+    
     Page<PgListingResponse> getAllListings(Pageable pageable);
+    
+    List<PgListingResponse> getAllListingsAsList();
 }

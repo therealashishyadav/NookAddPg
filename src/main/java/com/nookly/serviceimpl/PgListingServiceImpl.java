@@ -424,11 +424,19 @@ public class PgListingServiceImpl implements PgListingService {
         return res;
     }
 
- // Add this one method to the implementation
     @Override
     public Page<PgListingResponse> getAllListings(Pageable pageable) {
         return pgListingRepository
             .findByIsActiveTrue(pageable)
             .map(this::toResponse);
+    }
+
+    @Override
+    public List<PgListingResponse> getAllListingsAsList() {
+        return pgListingRepository
+            .findByIsActiveTrue()
+            .stream()
+            .map(this::toResponse)
+            .collect(Collectors.toList());
     }
 }

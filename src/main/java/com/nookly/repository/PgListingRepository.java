@@ -67,7 +67,10 @@ public interface PgListingRepository extends JpaRepository<PgListing, Long> {
     Page<PgListing> findByCityIgnoreCaseAndIsVerifiedTrueAndIsActiveTrue(
         String city, Pageable pageable);
 
- // Add this one method to the repository
+    // ── Pagination ─────────────────────────────────────────────────────────
     Page<PgListing> findByIsActiveTrue(Pageable pageable);
+    
+    // ── All listings as List (for internal service communication) ─────────
+    List<PgListing> findByIsActiveTrue();
 	
 }
