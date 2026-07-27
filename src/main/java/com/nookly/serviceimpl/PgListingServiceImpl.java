@@ -122,43 +122,45 @@ public class PgListingServiceImpl implements PgListingService {
     }
 
     // ── UPDATE ─────────────────────────────────────────────────────────────
-    @Override
-    @Transactional
-    public PgListingResponse updateListing(Long id, CreatePgListingRequest request, Long ownerId) {
-        PgListing pg = pgListingRepository.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PG not found"));
+@Override
+@Transactional
+public PgListingResponse updateListing(Long id, CreatePgListingRequest request, Long ownerId) {
+    PgListing pg = pgListingRepository.findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "PG not found"));
 
-        if (!pg.getOwnerId().equals(ownerId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this listing");
-        }
-
-        // 🔥 FIX: Delete all existing sharing options for this PG
-        sharingOptionRepository.deleteAllByPgListingId(id);
-
-        // Update all other fields
-        mapRequestToEntity(request, pg);
-
-        // Create new sharing options
-        List<PgSharingOption> updatedOptions = request.getSharingOptions().stream()
-            .map(optReq -> {
-                PgSharingOption opt = new PgSharingOption();
-                opt.setPgListing(pg);
-                opt.setSharingType(optReq.getSharingType());
-                opt.setPricePerMonth(optReq.getPricePerMonth());
-                opt.setTotalBeds(optReq.getTotalBeds());
-                opt.setAvailableBeds(optReq.getTotalBeds());
-                opt.setAmenities(optReq.getAmenities() != null ? optReq.getAmenities() : new ArrayList<>());
-                opt.setIsAvailable(true);
-                return opt;
-            })
-            .collect(Collectors.toList());
-
-        pg.setSharingOptions(updatedOptions);
-
-        // Save – now only the new options exist
-        PgListing saved = pgListingRepository.save(pg);
-        return toResponse(saved);
+    if (!pg.getOwnerId().equals(ownerId)) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this listing");
     }
+
+    // Delete all existing sharing options from the database
+    sharingOptionRepository.deleteAllByPgListingId(id);
+
+    // Update all other fields
+    mapRequestToEntity(request, pg);
+
+    // Build new sharing options
+    List<PgSharingOption> updatedOptions = request.getSharingOptions().stream()
+        .map(optReq -> {
+            PgSharingOption opt = new PgSharingOption();
+            opt.setPgListing(pg);
+            opt.setSharingType(optReq.getSharingType());
+            opt.setPricePerMonth(optReq.getPricePerMonth());
+            opt.setTotalBeds(optReq.getTotalBeds());
+            opt.setAvailableBeds(optReq.getTotalBeds());
+            opt.setAmenities(optReq.getAmenities() != null ? optReq.getAmenities() : new ArrayList<>());
+            opt.setIsAvailable(true);
+            return opt;
+        })
+        .collect(Collectors.toList());
+
+    // ⭐ FIX: Clear and add to the existing collection, do NOT reassign
+    pg.getSharingOptions().clear();
+    pg.getSharingOptions().addAll(updatedOptions);
+
+    // Save – now only the new options exist
+    PgListing saved = pgListingRepository.save(pg);
+    return toResponse(saved);
+}
 
     // ── DEACTIVATE ─────────────────────────────────────────────────────────
     @Override
