@@ -27,6 +27,7 @@ public class PgListingServiceImpl implements PgListingService {
 
     @Autowired
     private PgSharingOptionRepository sharingOptionRepository;
+    
 
     // ── CREATE ─────────────────────────────────────────────────────────────
     @Override
@@ -131,11 +132,13 @@ public class PgListingServiceImpl implements PgListingService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not own this listing");
         }
 
-        // Re-map all fields
+        // 🔥 FIX: Delete all existing sharing options for this PG
+        sharingOptionRepository.deleteAllByPgListingId(id);
+
+        // Update all other fields
         mapRequestToEntity(request, pg);
 
-        // Replace sharing options entirely
-        pg.getSharingOptions().clear();
+        // Create new sharing options
         List<PgSharingOption> updatedOptions = request.getSharingOptions().stream()
             .map(optReq -> {
                 PgSharingOption opt = new PgSharingOption();
@@ -150,9 +153,11 @@ public class PgListingServiceImpl implements PgListingService {
             })
             .collect(Collectors.toList());
 
-        pg.getSharingOptions().addAll(updatedOptions);
+        pg.setSharingOptions(updatedOptions);
 
-        return toResponse(pgListingRepository.save(pg));
+        // Save – now only the new options exist
+        PgListing saved = pgListingRepository.save(pg);
+        return toResponse(saved);
     }
 
     // ── DEACTIVATE ─────────────────────────────────────────────────────────

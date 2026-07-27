@@ -3,6 +3,9 @@ package com.nookly.repository;
 import com.nookly.entity.PgSharingOption;
 import com.nookly.entity.SharingType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -22,4 +25,8 @@ public interface PgSharingOptionRepository extends JpaRepository<PgSharingOption
 
     // ── Delete all options for a PG (used when PG is removed) ─────────────
     void deleteByPgListingId(Long pgListingId);
+    
+    @Modifying
+    @Query("DELETE FROM PgSharingOption o WHERE o.pgListing.id = :pgId")
+    void deleteAllByPgListingId(@Param("pgId") Long pgId);
 }
