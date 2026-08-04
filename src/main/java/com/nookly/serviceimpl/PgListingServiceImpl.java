@@ -487,7 +487,7 @@ public class PgListingServiceImpl implements PgListingService {
 	            errors.add("File is empty.");
 	            return new PgImportResult(0, 0, 1, errors);
 	        }
-	        String[] headers = headerLine.split(",", -1);
+	        String[] headers = splitCsvLine(headerLine);
 	        Map<String, Integer> colIndex = new HashMap<>();
 	        for (int i = 0; i < headers.length; i++) {
 	            colIndex.put(headers[i].trim(), i);
@@ -501,8 +501,7 @@ public class PgListingServiceImpl implements PgListingService {
 	            totalProcessed++;
 	            if (line.trim().isEmpty()) continue;
 
-	            String[] cols = line.split(",", -1);
-
+	            String[] cols = splitCsvLine(line);
 	            // Helper to get a value by column name
 	            java.util.function.Function<String, String> getVal = fieldName -> {
 	                Integer idx = colIndex.get(fieldName);
