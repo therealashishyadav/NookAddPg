@@ -1,7 +1,19 @@
 package com.nookly.serviceimpl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import org.springframework.web.multipart.MultipartFile;
 import com.nookly.dto.CreatePgListingRequest;
 import com.nookly.dto.CreatePgListingRequest.SharingOptionRequest;
+import com.nookly.dto.PgImportResult;
+import com.nookly.dto.PgImportRow;
 import com.nookly.dto.PgListingResponse;
 import com.nookly.entity.*;
 import com.nookly.repository.PgListingRepository;
@@ -13,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -439,4 +452,337 @@ public class PgListingServiceImpl implements PgListingService {
 	public List<PgListingResponse> getAllListingsAsList() {
 		return pgListingRepository.findByIsActiveTrue().stream().map(this::toResponse).collect(Collectors.toList());
 	}
+
+	@Override
+	@Transactional
+	public PgImportResult importFromCsv(Long ownerId, MultipartFile file) {
+	    List<String> errors = new ArrayList<>();
+	    int totalProcessed = 0;
+	    int successCount = 0;
+	    ObjectMapper objectMapper = new ObjectMapper();
+
+	    // ── File validation ──────────────────────────────────────────────
+	    if (file == null || file.isEmpty()) {
+	        errors.add("File is empty or not provided.");
+	        return new PgImportResult(0, 0, 1, errors);
+	    }
+	    if (file.getSize() > 5 * 1024 * 1024) {
+	        errors.add("File size exceeds 5MB limit.");
+	        return new PgImportResult(0, 0, 1, errors);
+	    }
+
+	    // ── Date formatters ──────────────────────────────────────────────
+	    List<DateTimeFormatter> dateFormatters = Arrays.asList(
+	        DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+	        DateTimeFormatter.ofPattern("MM/dd/yyyy"),
+	        DateTimeFormatter.ofPattern("M/d/yyyy")
+	    );
+
+	    // ── Read CSV ─────────────────────────────────────────────────────
+	    try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
+
+	        // Read header
+	        String headerLine = reader.readLine();
+	        if (headerLine == null) {
+	            errors.add("File is empty.");
+	            return new PgImportResult(0, 0, 1, errors);
+	        }
+	        String[] headers = headerLine.split(",", -1);
+	        Map<String, Integer> colIndex = new HashMap<>();
+	        for (int i = 0; i < headers.length; i++) {
+	            colIndex.put(headers[i].trim(), i);
+	        }
+
+	        String line;
+	        int rowNumber = 1;
+
+	        while ((line = reader.readLine()) != null) {
+	            rowNumber++;
+	            totalProcessed++;
+	            if (line.trim().isEmpty()) continue;
+
+	            String[] cols = line.split(",", -1);
+
+	            // Helper to get a value by column name
+	            java.util.function.Function<String, String> getVal = fieldName -> {
+	                Integer idx = colIndex.get(fieldName);
+	                return (idx != null && idx < cols.length) ? cols[idx].trim() : null;
+	            };
+
+	            try {
+	                // ── Map CSV row to PgImportRow ──────────────────────────────
+	                PgImportRow row = new PgImportRow();
+
+	                // All fields – using the getVal function
+	                row.setPgName(getVal.apply("pgName"));
+	                row.setFullAddress(getVal.apply("fullAddress"));
+	                row.setCity(getVal.apply("city"));
+	                row.setLocality(getVal.apply("locality"));
+	                row.setPinCode(getVal.apply("pinCode"));
+	                row.setGoogleMapLink(getVal.apply("googleMapLink"));
+	                row.setNearbyLandmarks(getVal.apply("nearbyLandmarks"));
+	                row.setCoverImageUrl(getVal.apply("coverImageUrl"));
+	                row.setGalleryImages(getVal.apply("galleryImages"));
+	                row.setVirtualTourLink(getVal.apply("virtualTourLink"));
+	                row.setVideoLink(getVal.apply("videoLink"));
+	                row.setOccupancyType(getVal.apply("occupancyType"));
+	                row.setRoomSizeSqFt(parseDouble(getVal.apply("roomSizeSqFt")));
+	                row.setFurnished(parseBoolean(getVal.apply("furnished")));
+	                row.setAttachedWashroom(parseBoolean(getVal.apply("attachedWashroom")));
+	                row.setBalconyAvailable(parseBoolean(getVal.apply("balconyAvailable")));
+	                row.setAirConditioned(parseBoolean(getVal.apply("airConditioned")));
+	                row.setBedType(getVal.apply("bedType"));
+	                row.setMattressProvided(parseBoolean(getVal.apply("mattressProvided")));
+	                row.setStudyTableAvailable(parseBoolean(getVal.apply("studyTableAvailable")));
+	                row.setFoodProvided(parseBoolean(getVal.apply("foodProvided")));
+	                row.setMealTypes(getVal.apply("mealTypes"));
+	                row.setFoodOptions(getVal.apply("foodOptions"));
+	                row.setCookingAllowed(parseBoolean(getVal.apply("cookingAllowed")));
+	                row.setCommonKitchenAccess(parseBoolean(getVal.apply("commonKitchenAccess")));
+	                row.setFridgeAvailable(parseBoolean(getVal.apply("fridgeAvailable")));
+	                row.setMicrowaveAvailable(parseBoolean(getVal.apply("microwaveAvailable")));
+	                row.setWifiAvailable(parseBoolean(getVal.apply("wifiAvailable")));
+	                row.setPowerBackupAvailable(parseBoolean(getVal.apply("powerBackupAvailable")));
+	                row.setGeyserAvailable(parseBoolean(getVal.apply("geyserAvailable")));
+	                row.setWashingMachineAvailable(parseBoolean(getVal.apply("washingMachineAvailable")));
+	                row.setHousekeepingFrequency(getVal.apply("housekeepingFrequency"));
+	                row.setCctvSurveillance(parseBoolean(getVal.apply("cctvSurveillance")));
+	                row.setSecurityGuardAvailable(parseBoolean(getVal.apply("securityGuardAvailable")));
+	                row.setLiftAvailable(parseBoolean(getVal.apply("liftAvailable")));
+	                row.setTwoWheelerParking(parseBoolean(getVal.apply("twoWheelerParking")));
+	                row.setFourWheelerParking(parseBoolean(getVal.apply("fourWheelerParking")));
+	                row.setLoungeAvailable(parseBoolean(getVal.apply("loungeAvailable")));
+	                row.setRecreationAreaAvailable(parseBoolean(getVal.apply("recreationAreaAvailable")));
+	                row.setGymAvailable(parseBoolean(getVal.apply("gymAvailable")));
+	                row.setRooftopAccess(parseBoolean(getVal.apply("rooftopAccess")));
+	                row.setDailyCleaning(parseBoolean(getVal.apply("dailyCleaning")));
+	                row.setLaundryService(parseBoolean(getVal.apply("laundryService")));
+	                row.setMaintenanceOnCall(parseBoolean(getVal.apply("maintenanceOnCall")));
+	                row.setWaterPurifierAvailable(parseBoolean(getVal.apply("waterPurifierAvailable")));
+	                row.setDispenserAvailable(parseBoolean(getVal.apply("dispenserAvailable")));
+	                row.setEntryExitTimings(getVal.apply("entryExitTimings"));
+	                row.setVisitorsAllowed(parseBoolean(getVal.apply("visitorsAllowed")));
+	                row.setGuestsOvernightAllowed(parseBoolean(getVal.apply("guestsOvernightAllowed")));
+	                row.setSecurityDepositAmount(parseDouble(getVal.apply("securityDepositAmount")));
+	                row.setIdVerificationRequired(parseBoolean(getVal.apply("idVerificationRequired")));
+	                row.setFireSafetyAvailable(parseBoolean(getVal.apply("fireSafetyAvailable")));
+	                row.setSmokingAllowed(parseBoolean(getVal.apply("smokingAllowed")));
+	                row.setPetsAllowed(parseBoolean(getVal.apply("petsAllowed")));
+	                row.setAlcoholAllowed(parseBoolean(getVal.apply("alcoholAllowed")));
+	                row.setDepositAmount(parseDouble(getVal.apply("depositAmount")));
+	                row.setNoticePeriodDays(parseInteger(getVal.apply("noticePeriodDays")));
+	                row.setLockInPeriodMonths(parseInteger(getVal.apply("lockInPeriodMonths")));
+	                row.setAdditionalChargesInfo(getVal.apply("additionalChargesInfo"));
+	                row.setMaintenanceChargesInfo(getVal.apply("maintenanceChargesInfo"));
+	                row.setOwnerName(getVal.apply("ownerName"));
+	                row.setContactNumber(getVal.apply("contactNumber"));
+	                row.setWhatsappNumber(getVal.apply("whatsappNumber"));
+	                row.setEmail(getVal.apply("email"));
+	                row.setVisitingHours(getVal.apply("visitingHours"));
+	                row.setAvailabilityFor(getVal.apply("availabilityFor"));
+	                row.setAgreementType(getVal.apply("agreementType"));
+	                row.setMinimumStayMonths(parseInteger(getVal.apply("minimumStayMonths")));
+	                row.setNoticePeriodToLeaveDays(parseInteger(getVal.apply("noticePeriodToLeaveDays")));
+	                row.setRefundPolicy(getVal.apply("refundPolicy"));
+	                row.setHouseRulesDocumentUrl(getVal.apply("houseRulesDocumentUrl"));
+	                row.setSpecialOffers(getVal.apply("specialOffers"));
+	                row.setEarlyBirdDiscounts(getVal.apply("earlyBirdDiscounts"));
+	                row.setReferralBonuses(getVal.apply("referralBonuses"));
+	                row.setImmediatePossession(parseBoolean(getVal.apply("immediatePossession")));
+	                String dateStr = getVal.apply("availableFromDate");
+	                if (dateStr != null && !dateStr.isEmpty()) {
+	                    LocalDate parsed = null;
+	                    for (DateTimeFormatter fmt : dateFormatters) {
+	                        try { parsed = LocalDate.parse(dateStr, fmt); break; } catch (Exception ignored) {}
+	                    }
+	                    row.setAvailableFromDate(parsed != null ? parsed : LocalDate.now());
+	                } else {
+	                    row.setAvailableFromDate(LocalDate.now());
+	                }
+	                row.setWaitingList(parseBoolean(getVal.apply("waitingList")));
+	                row.setTotalRooms(parseInteger(getVal.apply("totalRooms")));
+	                row.setAvailableRooms(parseInteger(getVal.apply("availableRooms")));
+	                row.setSharingOptionsJson(getVal.apply("sharingOptionsJson"));
+
+	                // ── Required fields validation ──────────────────────────────
+	                if (isEmpty(row.getPgName())) {
+	                    errors.add("Row " + rowNumber + ": pgName is required.");
+	                    continue;
+	                }
+	                if (isEmpty(row.getCity())) {
+	                    errors.add("Row " + rowNumber + ": city is required.");
+	                    continue;
+	                }
+	                if (isEmpty(row.getOccupancyType())) {
+	                    errors.add("Row " + rowNumber + ": occupancyType is required.");
+	                    continue;
+	                }
+
+	                // Validate occupancyType enum
+	                try {
+	                    if (row.getOccupancyType() != null)
+	                        OccupancyType.valueOf(row.getOccupancyType().toUpperCase());
+	                } catch (IllegalArgumentException e) {
+	                    errors.add("Row " + rowNumber + ": invalid occupancyType.");
+	                    continue;
+	                }
+
+	                // ── Build PgListing entity ──────────────────────────────────
+	                PgListing pg = new PgListing();
+	                pg.setOwnerId(ownerId);
+	                pg.setPgName(row.getPgName());
+	                pg.setFullAddress(row.getFullAddress());
+	                pg.setCity(row.getCity());
+	                pg.setLocality(row.getLocality());
+	                pg.setPinCode(row.getPinCode());
+	                pg.setGoogleMapLink(row.getGoogleMapLink());
+	                pg.setNearbyLandmarks(row.getNearbyLandmarks());
+	                pg.setCoverImageUrl(row.getCoverImageUrl());
+	                if (row.getGalleryImages() != null && !row.getGalleryImages().isEmpty()) {
+	                    pg.setGalleryImages(Arrays.asList(row.getGalleryImages().split(",")));
+	                }
+	                pg.setVirtualTourLink(row.getVirtualTourLink());
+	                pg.setVideoLink(row.getVideoLink());
+	                pg.setOccupancyType(row.getOccupancyType() != null ? OccupancyType.valueOf(row.getOccupancyType().toUpperCase()) : null);
+	                pg.setRoomSizeSqFt(row.getRoomSizeSqFt());
+	                pg.setFurnished(row.getFurnished() != null ? row.getFurnished() : false);
+	                pg.setAttachedWashroom(row.getAttachedWashroom() != null ? row.getAttachedWashroom() : false);
+	                pg.setBalconyAvailable(row.getBalconyAvailable() != null ? row.getBalconyAvailable() : false);
+	                pg.setAirConditioned(row.getAirConditioned() != null ? row.getAirConditioned() : false);
+	                pg.setBedType(row.getBedType() != null ? BedType.valueOf(row.getBedType().toUpperCase()) : null);
+	                pg.setMattressProvided(row.getMattressProvided() != null ? row.getMattressProvided() : false);
+	                pg.setStudyTableAvailable(row.getStudyTableAvailable() != null ? row.getStudyTableAvailable() : false);
+	                pg.setFoodProvided(row.getFoodProvided() != null ? row.getFoodProvided() : false);
+	                pg.setMealTypes(row.getMealTypes());
+	                pg.setFoodOptions(row.getFoodOptions());
+	                pg.setCookingAllowed(row.getCookingAllowed() != null ? row.getCookingAllowed() : false);
+	                pg.setCommonKitchenAccess(row.getCommonKitchenAccess() != null ? row.getCommonKitchenAccess() : false);
+	                pg.setFridgeAvailable(row.getFridgeAvailable() != null ? row.getFridgeAvailable() : false);
+	                pg.setMicrowaveAvailable(row.getMicrowaveAvailable() != null ? row.getMicrowaveAvailable() : false);
+	                pg.setWifiAvailable(row.getWifiAvailable() != null ? row.getWifiAvailable() : false);
+	                pg.setPowerBackupAvailable(row.getPowerBackupAvailable() != null ? row.getPowerBackupAvailable() : false);
+	                pg.setGeyserAvailable(row.getGeyserAvailable() != null ? row.getGeyserAvailable() : false);
+	                pg.setWashingMachineAvailable(row.getWashingMachineAvailable() != null ? row.getWashingMachineAvailable() : false);
+	                pg.setHousekeepingFrequency(row.getHousekeepingFrequency() != null ? HousekeepingFrequency.valueOf(row.getHousekeepingFrequency().toUpperCase()) : null);
+	                pg.setCctvSurveillance(row.getCctvSurveillance() != null ? row.getCctvSurveillance() : false);
+	                pg.setSecurityGuardAvailable(row.getSecurityGuardAvailable() != null ? row.getSecurityGuardAvailable() : false);
+	                pg.setLiftAvailable(row.getLiftAvailable() != null ? row.getLiftAvailable() : false);
+	                pg.setTwoWheelerParking(row.getTwoWheelerParking() != null ? row.getTwoWheelerParking() : false);
+	                pg.setFourWheelerParking(row.getFourWheelerParking() != null ? row.getFourWheelerParking() : false);
+	                pg.setLoungeAvailable(row.getLoungeAvailable() != null ? row.getLoungeAvailable() : false);
+	                pg.setRecreationAreaAvailable(row.getRecreationAreaAvailable() != null ? row.getRecreationAreaAvailable() : false);
+	                pg.setGymAvailable(row.getGymAvailable() != null ? row.getGymAvailable() : false);
+	                pg.setRooftopAccess(row.getRooftopAccess() != null ? row.getRooftopAccess() : false);
+	                pg.setDailyCleaning(row.getDailyCleaning() != null ? row.getDailyCleaning() : false);
+	                pg.setLaundryService(row.getLaundryService() != null ? row.getLaundryService() : false);
+	                pg.setMaintenanceOnCall(row.getMaintenanceOnCall() != null ? row.getMaintenanceOnCall() : false);
+	                pg.setWaterPurifierAvailable(row.getWaterPurifierAvailable() != null ? row.getWaterPurifierAvailable() : false);
+	                pg.setDispenserAvailable(row.getDispenserAvailable() != null ? row.getDispenserAvailable() : false);
+	                pg.setEntryExitTimings(row.getEntryExitTimings());
+	                pg.setVisitorsAllowed(row.getVisitorsAllowed() != null ? row.getVisitorsAllowed() : false);
+	                pg.setGuestsOvernightAllowed(row.getGuestsOvernightAllowed() != null ? row.getGuestsOvernightAllowed() : false);
+	                pg.setSecurityDepositAmount(row.getSecurityDepositAmount() != null ? row.getSecurityDepositAmount() : 0.0);
+	                pg.setIdVerificationRequired(row.getIdVerificationRequired() != null ? row.getIdVerificationRequired() : false);
+	                pg.setFireSafetyAvailable(row.getFireSafetyAvailable() != null ? row.getFireSafetyAvailable() : false);
+	                pg.setSmokingAllowed(row.getSmokingAllowed() != null ? row.getSmokingAllowed() : false);
+	                pg.setPetsAllowed(row.getPetsAllowed() != null ? row.getPetsAllowed() : false);
+	                pg.setAlcoholAllowed(row.getAlcoholAllowed() != null ? row.getAlcoholAllowed() : false);
+	                pg.setDepositAmount(row.getDepositAmount() != null ? row.getDepositAmount() : 0.0);
+	                pg.setNoticePeriodDays(row.getNoticePeriodDays() != null ? row.getNoticePeriodDays() : 0);
+	                pg.setLockInPeriodMonths(row.getLockInPeriodMonths() != null ? row.getLockInPeriodMonths() : 0);
+	                pg.setAdditionalChargesInfo(row.getAdditionalChargesInfo());
+	                pg.setMaintenanceChargesInfo(row.getMaintenanceChargesInfo());
+	                pg.setOwnerName(row.getOwnerName());
+	                pg.setContactNumber(row.getContactNumber());
+	                pg.setWhatsappNumber(row.getWhatsappNumber());
+	                pg.setEmail(row.getEmail());
+	                pg.setVisitingHours(row.getVisitingHours());
+	                pg.setAvailabilityFor(row.getAvailabilityFor() != null ? AvailabilityFor.valueOf(row.getAvailabilityFor().toUpperCase()) : null);
+	                pg.setAgreementType(row.getAgreementType() != null ? AgreementType.valueOf(row.getAgreementType().toUpperCase()) : null);
+	                pg.setMinimumStayMonths(row.getMinimumStayMonths() != null ? row.getMinimumStayMonths() : 0);
+	                pg.setNoticePeriodToLeaveDays(row.getNoticePeriodToLeaveDays() != null ? row.getNoticePeriodToLeaveDays() : 0);
+	                pg.setRefundPolicy(row.getRefundPolicy());
+	                pg.setHouseRulesDocumentUrl(row.getHouseRulesDocumentUrl());
+	                pg.setSpecialOffers(row.getSpecialOffers());
+	                pg.setEarlyBirdDiscounts(row.getEarlyBirdDiscounts());
+	                pg.setReferralBonuses(row.getReferralBonuses());
+	                pg.setImmediatePossession(row.getImmediatePossession() != null ? row.getImmediatePossession() : false);
+	                pg.setAvailableFromDate(row.getAvailableFromDate() != null ? row.getAvailableFromDate() : LocalDate.now());
+	                pg.setWaitingList(row.getWaitingList() != null ? row.getWaitingList() : false);
+	                pg.setTotalRooms(row.getTotalRooms() != null ? row.getTotalRooms() : 0);
+	                pg.setAvailableRooms(row.getAvailableRooms() != null ? row.getAvailableRooms() : pg.getTotalRooms());
+	                pg.setIsActive(true);
+	                pg.setIsVerified(false);
+	                pg.setCreatedAt(LocalDateTime.now());
+
+	                // ─── Parse sharing options ──────────────────────────────────
+	                if (row.getSharingOptionsJson() != null && !row.getSharingOptionsJson().isEmpty()) {
+	                    try {
+	                        // Use PgSharingOption (the entity)
+	                        List<PgSharingOption> options = objectMapper.readValue(
+	                                row.getSharingOptionsJson(),
+	                                new TypeReference<List<PgSharingOption>>() {}
+	                        );
+	                        for (PgSharingOption opt : options) {
+	                            opt.setPgListing(pg);
+	                        }
+	                        pg.setSharingOptions(options);
+	                    } catch (Exception e) {
+	                        errors.add("Row " + rowNumber + ": invalid sharingOptionsJson: " + e.getMessage());
+	                        continue;
+	                    }
+	                } else {
+	                    // Default sharing option
+	                    PgSharingOption defaultOpt = new PgSharingOption();
+	                    defaultOpt.setSharingType(SharingType.ONE_SHARING);
+	                    defaultOpt.setPricePerMonth(BigDecimal.ZERO);
+	                    defaultOpt.setTotalBeds(1);
+	                    defaultOpt.setAvailableBeds(1);
+	                    defaultOpt.setAmenities(new ArrayList<>());
+	                    defaultOpt.setPgListing(pg);
+	                    pg.setSharingOptions(List.of(defaultOpt));
+	                }
+
+	                // ─── Compute lowest price ──────────────────────────────────
+	                // Note: you have a "lowestPrice" field in PgListingResponse, not in entity.
+	                // The entity doesn't need a lowestPrice field; it's computed on the fly.
+	                // So we don't set any entity field; it will be computed in toResponse().
+
+	                pgListingRepository.save(pg);
+	                successCount++;
+
+	            } catch (Exception e) {
+	                errors.add("Row " + rowNumber + ": " + e.getMessage());
+	            }
+	        }
+
+	    } catch (Exception e) {
+	        errors.add("File processing error: " + e.getMessage());
+	    }
+
+	    return new PgImportResult(totalProcessed, successCount, totalProcessed - successCount, errors);
+	}
+
+	// ─── Helper methods (keep these in the class) ──────────────────────────
+
+	private Double parseDouble(String val) {
+	    if (val == null || val.isEmpty()) return null;
+	    try { return Double.parseDouble(val); } catch (NumberFormatException e) { return null; }
+	}
+
+	private Integer parseInteger(String val) {
+	    if (val == null || val.isEmpty()) return null;
+	    try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
+	}
+
+	private Boolean parseBoolean(String val) {
+	    if (val == null || val.isEmpty()) return null;
+	    return "true".equalsIgnoreCase(val) || "1".equals(val);
+	}
+
+	private boolean isEmpty(String s) {
+	    return s == null || s.trim().isEmpty();
+	}
+	
+	
 }

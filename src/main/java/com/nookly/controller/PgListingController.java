@@ -179,6 +179,7 @@ package com.nookly.controller;
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
 import com.nookly.dto.CreatePgListingRequest;
+import com.nookly.dto.PgImportResult;
 import com.nookly.dto.PgListingResponse;
 import com.nookly.entity.OccupancyType;
 import com.nookly.entity.SharingType;
@@ -187,6 +188,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -351,5 +353,29 @@ public class PgListingController {
     @GetMapping("/all")
     public ResponseEntity<List<PgListingResponse>> getAllListingsAsList() {
         return ResponseEntity.ok(pgListingService.getAllListingsAsList());
+    }
+    @PostMapping(value = "/import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> importFromCsv(
+            @RequestParam("file") MultipartFile file,
+            HttpServletRequest request) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body(Map.of("error", "No token provided"));
+            }
+            // Extract ownerId from JWT – adjust to your logic
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigninKey())
+                    .build()
+                    .parseClaimsJws(authHeader.substring(7))
+                    .getBody();
+            Object userIdObj = claims.get("userId");
+            Long ownerId = (userIdObj instanceof Integer) ? ((Integer) userIdObj).longValue() : (Long) userIdObj;
+
+            PgImportResult result = pgListingService.importFromCsv(ownerId, file);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
     }
 }
